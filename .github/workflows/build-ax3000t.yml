@@ -1,15 +1,24 @@
-name: Build Xiaomi AX3000T Firmware
+name: Build ImmortalWrt Firmware (AX3000T / WR30U)
 
 on:
   workflow_dispatch:
     inputs:
-      config_type:
-        description: '固件配置类型 (Configuration Type)'
+      target_device:
+        description: '目标路由器型号 (Target Device)'
         required: true
-        default: 'current'
+        default: 'AX3000T'
         type: choice
         options:
-          - 'current'
+          - 'AX3000T'
+          - 'WR30U'
+          - 'ALL-MT7981'
+      config_type:
+        description: '配置风格 (Config Style: custom带OpenClash/TurboACC/闭源Wi-Fi; official为作者纯净版)'
+        required: true
+        default: 'custom'
+        type: choice
+        options:
+          - 'custom'
           - 'official'
       upload_release:
         description: '是否发布到 GitHub Releases (Upload to Releases)'
@@ -64,8 +73,16 @@ jobs:
           echo "Using author official defconfig: mt7981-ax3000.config"
           cp -f defconfig/mt7981-ax3000.config .config
         else
-          echo "Using current router 1:1 config: ax3000t-current.config"
-          cp -f defconfig/ax3000t-current.config .config
+          if [ "${{ github.event.inputs.target_device }}" = "WR30U" ]; then
+            echo "Using WR30U custom config: wr30u.config"
+            cp -f defconfig/wr30u.config .config
+          elif [ "${{ github.event.inputs.target_device }}" = "AX3000T" ]; then
+            echo "Using AX3000T custom config: ax3000t-current.config"
+            cp -f defconfig/ax3000t-current.config .config
+          else
+            echo "Using MT7981 full config: mt7981-ax3000.config"
+            cp -f defconfig/mt7981-ax3000.config .config
+          fi
         fi
         make defconfig
 
@@ -90,7 +107,16 @@ jobs:
       run: |
         mkdir -p /tmp/firmware
         cd bin/targets/mediatek/mt7981/
-        cp -f immortalwrt-mediatek-mt7981-xiaomi_mi-router-ax3000t* /tmp/firmware/ 2>/dev/null || cp -f *sysupgrade.bin /tmp/firmware/ 2>/dev/null || cp -f *ax3000t* /tmp/firmware/
+        if [ "${{ github.event.inputs.target_device }}" = "WR30U" ]; then
+          cp -f *wr30u* /tmp/firmware/ 2>/dev/null || true
+        elif [ "${{ github.event.inputs.target_device }}" = "AX3000T" ]; then
+          cp -f *ax3000t* /tmp/firmware/ 2>/dev/null || true
+        else
+          cp -f *.bin /tmp/firmware/ 2>/dev/null || true
+        fi
+        if [ -z "$(ls -A /tmp/firmware)" ]; then
+          cp -f *.bin /tmp/firmware/ 2>/dev/null || true
+        fi
         cd /tmp/firmware
         sha256sum * > sha256sums.txt
         echo "FIRMWARE_PATH=/tmp/firmware" >> $GITHUB_ENV
@@ -101,26 +127,31 @@ jobs:
       uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success'
       with:
-        name: ImmortalWrt_AX3000T_${{ env.BUILD_DATE }}
+        name: ImmortalWrt_${{ github.event.inputs.target_device }}_${{ env.BUILD_DATE }}
         path: ${{ env.FIRMWARE_PATH }}/*
 
     - name: 发布到 GitHub Releases (Create Release)
       uses: softprops/action-gh-release@v2
       if: steps.organize.outputs.status == 'success' && github.event.inputs.upload_release == 'true'
       with:
-        tag_name: AX3000T-${{ env.BUILD_DATE }}
-        name: Xiaomi AX3000T ImmortalWrt Firmware (${{ env.BUILD_DATE }})
+        tag_name: ${{ github.event.inputs.target_device }}-${{ env.BUILD_DATE }}
+        name: Xiaomi ${{ github.event.inputs.target_device }} ImmortalWrt Firmware (${{ env.BUILD_DATE }})
         body: |
-          ### 小米 AX3000T 固件编译完成
+          ### 小米 ${{ github.event.inputs.target_device }} 固件编译完成
           - **源码仓库**: [hanwckf/immortalwrt-mt798x](https://github.com/hanwckf/immortalwrt-mt798x)
           - **分支**: `openwrt-21.02` (内核 5.4)
           - **驱动**: MediaTek 原厂闭源 `mt_wifi` 驱动 (带 HNAT/PPE 硬件加速)
+          - **机型型号**: `${{ github.event.inputs.target_device }}`
           - **配置模式**: `${{ github.event.inputs.config_type }}`
           - **构建日期**: ${{ env.BUILD_DATE }}
 
           #### 刷机说明：
-          1. 已经在运行 ImmortalWrt 的路由器，请下载 `*sysupgrade.bin` 文件；
-          2. 进入路由器后台：**系统 -> 备份/升级 -> 刷写新的固件**，上传该文件即可平滑升级。
+          - **如果编译的是 WR30U**：
+            1. **`*wr30u-stock-squashfs-sysupgrade.bin`**：适用于原厂官方分区布局（直接在官方开启 SSH 后升级，或原厂布局固件平滑升级）；
+            2. **`*wr30u-112m-squashfs-factory.bin`**：适用于已刷入第三方 112M 大分区 U-Boot 的设备，在 U-Boot 网页恢复页面刷入；
+            3. **`*wr30u-112m-squashfs-sysupgrade.bin`**：适用于 112M 大分区布局下的日常升级更新。
+          - **如果编译的是 AX3000T**：
+            - 下载 `*sysupgrade.bin`，在路由器后台：**系统 -> 备份/升级 -> 刷写新的固件** 上传即可升级。
         files: ${{ env.FIRMWARE_PATH }}/*
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
