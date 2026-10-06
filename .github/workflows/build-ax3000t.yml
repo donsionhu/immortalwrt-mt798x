@@ -68,6 +68,10 @@ jobs:
       run: |
         ./scripts/feeds update -a
         ./scripts/feeds install -a
+        # 汉化菜单标题 (KMS 服务器 / 组播转换 / 组播代理)
+        find feeds/ -name "*udpxy.json" -exec sed -i 's/"title": "udpxy"/"title": "组播转换"/g' {} + 2>/dev/null || true
+        find feeds/ -name "*omcproxy.json" -exec sed -i 's/"title": "omcproxy"/"title": "组播代理"/g' {} + 2>/dev/null || true
+        find feeds/ -name "*vlmcsd.lua" -exec sed -i 's/"KMS Server"/"KMS 服务器"/g' {} + 2>/dev/null || true
 
     - name: 应用设备与插件配置 (Apply Configuration)
       run: |
