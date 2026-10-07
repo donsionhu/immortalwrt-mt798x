@@ -72,6 +72,8 @@ jobs:
         find feeds/ -name "*udpxy.json" -exec sed -i 's/"title": "udpxy"/"title": "组播转换"/g' {} + 2>/dev/null || true
         find feeds/ -name "*omcproxy.json" -exec sed -i 's/"title": "omcproxy"/"title": "组播代理"/g' {} + 2>/dev/null || true
         find feeds/ -name "*vlmcsd.lua" -exec sed -i 's/"KMS Server"/"KMS 服务器"/g' {} + 2>/dev/null || true
+        # 移除失效的 v2ray-geodata (上游 2023 历史发布已被 GitHub 删除，避免 404 导致编译中断)
+        rm -rf feeds/packages/net/v2ray-geodata 2>/dev/null || true
 
     - name: 应用设备与插件配置 (Apply Configuration)
       run: |
